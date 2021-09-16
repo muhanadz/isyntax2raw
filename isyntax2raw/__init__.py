@@ -20,8 +20,11 @@ import softwarerenderbackend
 import zarr
 
 from numcodecs.abc import Codec
-from numcodecs.compat import ensure_ndarray, ensure_bytes
-from numcodecs.compat import ndarray_copy
+from numcodecs.compat import \
+    ensure_bytes, \
+    ensure_contiguous_ndarray, \
+    ensure_ndarray, \
+    ndarray_copy
 from numcodecs.registry import register_codec
 import glymur
 import tempfile
@@ -396,6 +399,18 @@ class WriteTiles(object):
         else:
             return self.pixel_engine.wait_any(regions)
 
+    def write_image_metadata(self, resolutions, series):
+        multiscales = [{
+            'metadata': {
+                'method': 'pixelengine',
+                'version': str(self.pixel_engine.version)
+            },
+            'version': '0.2',
+            'datasets': [{'path': str(v)} for v in resolutions]
+        }]
+        z = self.zarr_group["%d" % series]
+        z.attrs['multiscales'] = multiscales
+
     def write_metadata_json(self, metadata_file):
         '''write metadata to a JSON file'''
 
@@ -501,7 +516,8 @@ class WriteTiles(object):
             for channel in range(0, 3):
                 band = np.array(img.getdata(band=channel))
                 band.shape = (height, width)
-                tile[0, 0, channel] = band
+                tile[0, channel, 0] = band
+            self.write_image_metadata(range(1), series)
 
             log.info("wrote %s image" % image_type)
 
@@ -520,10 +536,10 @@ class WriteTiles(object):
 
         # important to explicitly set the chunk size to 1 for non-XY dims
         # setting to None may cause all planes to be chunked together
-        # ordering is TZCYX and hard-coded since Z and T are not present
+        # ordering is TCZYX and hard-coded since Z and T are not present
         self.zarr_group.create_dataset(
             "%s/%s" % (str(series), str(resolution)),
-            shape=(1, 1, 3, height, width),
+            shape=(1, 3, 1, height, width),
             chunks=(1, 1, 1, self.tile_height, self.tile_width), dtype='B',
             compressor=j2k(self.psnr)
         )
@@ -560,7 +576,7 @@ class WriteTiles(object):
                 # disk (not interleaved RGB)
                 pixels = self.make_planar(pixels, tile_width, tile_height)
                 z = self.zarr_group["0/%d" % resolution]
-                z[0, 0, :, y_start:y_end, x_start:x_end] = pixels
+                z[0, :, 0, y_start:y_end, x_start:x_end] = pixels
             except Exception:
                 log.error(
                     "Failed to write tile [:, %d:%d, %d:%d]" % (
@@ -665,6 +681,7 @@ class WriteTiles(object):
                                 x_start, y_start, width, height
                             ))
             wait(jobs, return_when=ALL_COMPLETED)
+            self.write_image_metadata(resolutions, 0)
 
     def create_patch_list(
         self, dim_ranges, tiles, tile_size, tile_directory
@@ -733,26 +750,36 @@ class j2k(Codec):
         super().__init__()
 
     def encode(self, buf):
-        buf = np.squeeze(buf)
-        bufa = ensure_ndarray(buf)
-        tmp = tempfile.NamedTemporaryFile()
-        buff = glymur.Jp2k(tmp.name, shape=bufa.shape)
-        buff._write(bufa, psnr=[self.psnr], numres=1)
-        f = open(tmp.name, 'rb')
-        array = f.read()
+        buf = ensure_ndarray(np.squeeze(buf))
+        fd, fname = tempfile.mkstemp()
+        try:
+            buff = glymur.Jp2k(
+                fname, psnr=[self.psnr], shape=buf.shape, numres=1
+            )
+            buff._write(buf)
+            with open(fname, 'rb') as f:
+                array = f.read()
+        finally:
+            os.close(fd)
+            os.remove(fname)
         return array
 
     def decode(self, buf, out=None):
-        buf = ensure_bytes(buf)
-        if out is not None:
-            out = ensure_bytes(out)
-        tmp = tempfile.NamedTemporaryFile(delete=False)
-        with open(tmp.name, "wb") as fb:
-            fb.write(buf)
-        jp2 = glymur.Jp2k(tmp.name)
-        fullres = jp2[:]
-        tiled = fullres
-        return ndarray_copy(tiled, out)
+        fd, fname = tempfile.mkstemp()
+        try:
+            with open(fname, 'wb') as f:
+                f.write(buf)
+            buf = ensure_bytes(buf)
+            jp2 = glymur.Jp2k(fname)
+            if out is not None:
+                out_view = ensure_contiguous_ndarray(out)
+                ndarray_copy(jp2[:], out_view)
+            else:
+                out = jp2[:]
+            return out
+        finally:
+            os.close(fd)
+            os.remove(fname)
 
 
 register_codec(j2k)
