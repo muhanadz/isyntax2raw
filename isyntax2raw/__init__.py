@@ -12,7 +12,6 @@ import json
 import logging
 import math
 import os
-import threading
 
 import numpy as np
 import pixelengine
@@ -783,5 +782,4 @@ class j2k(Codec):
             os.remove(fname)
 
 
-lock = threading.Lock()
 register_codec(j2k)
