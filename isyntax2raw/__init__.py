@@ -526,6 +526,8 @@ class WriteTiles(object):
             compressor = zarr.Zlib(level=1)
         if self.compression == 'j2k':
             compressor = j2k(self.level)
+        if self.compression == 'raw':
+            compressor = None
         self.zarr_store = FSStore(
             self.slide_directory,
             dimension_separator=dimension_separator,

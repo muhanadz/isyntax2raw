@@ -71,7 +71,7 @@ def cli():
 )
 @click.option(
     "--compression", default='blosc', show_default=True,
-    type=click.Choice(['blosc', 'zlib', 'j2k'], case_sensitive=False),
+    type=click.Choice(['blosc', 'zlib', 'j2k', 'raw'], case_sensitive=False),
     help="Chunk compression type"
 )
 @click.argument("input_path")
