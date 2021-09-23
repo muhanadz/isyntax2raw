@@ -19,14 +19,8 @@ import softwarerendercontext
 import softwarerenderbackend
 import zarr
 
-from numcodecs.abc import Codec
-from numcodecs.compat import \
-    ensure_bytes, \
-    ensure_contiguous_ndarray, \
-    ensure_ndarray, \
-    ndarray_copy
-from numcodecs.registry import register_codec
-import imagecodecs
+from zarr_j2k import j2k
+from numcodecs import Blosc
 
 from datetime import datetime
 from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
@@ -90,7 +84,8 @@ class WriteTiles(object):
 
     def __init__(
         self, tile_width, tile_height, resolutions, max_workers,
-        batch_size, fill_color, nested, input_path, output_path, psnr
+        batch_size, fill_color, nested, input_path, output_path,
+        compression, level
     ):
         self.tile_width = tile_width
         self.tile_height = tile_height
@@ -101,7 +96,8 @@ class WriteTiles(object):
         self.nested = nested
         self.input_path = input_path
         self.slide_directory = output_path
-        self.psnr = psnr
+        self.level = level
+        self.compression = compression
 
         render_context = softwarerendercontext.SoftwareRenderContext()
         render_backend = softwarerenderbackend.SoftwareRenderBackend()
@@ -524,6 +520,12 @@ class WriteTiles(object):
         dimension_separator = '/'
         if not self.nested:
             dimension_separator = '.'
+        if self.compression == 'blosc':
+            compressor = Blosc(cname='lz4', clevel=5, shuffle=Blosc.SHUFFLE)
+        if self.compression == 'zlib':
+            compressor = zarr.Zlib(level=1)
+        if self.compression == 'j2k':
+            compressor = j2k(self.level)
         self.zarr_store = FSStore(
             self.slide_directory,
             dimension_separator=dimension_separator,
@@ -541,7 +543,7 @@ class WriteTiles(object):
             "%s/%s" % (str(series), str(resolution)),
             shape=(1, 1, height, width, 3),
             chunks=(1, 1, self.tile_height, self.tile_width, 3), dtype='B',
-            compressor=j2k(self.psnr)
+            compressor=compressor
         )
 
     def write_pyramid(self):
@@ -721,36 +723,3 @@ class WriteTiles(object):
                 # order to identify the patches returned asynchronously
                 patch_ids.append((x, y))
         return patches, patch_ids
-
-
-class j2k(Codec):
-    """Codec providing j2k compression via imagecodecs.
-    Parameters
-    ----------
-    psnr : int
-        Compression peak signal noise ratio.
-    """
-
-    codec_id = "j2k"
-
-    def __init__(self, psnr=50):
-        self.psnr = psnr
-        assert (self.psnr > 0 and self.psnr <= 100
-                and isinstance(self.psnr, int))
-        super().__init__()
-
-    def encode(self, buf):
-        return imagecodecs.jpeg2k_encode(np.squeeze(buf), level=self.psnr)
-
-    def decode(self, buf, out=None):
-            buf = ensure_bytes(buf)
-            decoded = imagecodecs.jpeg2k_decode(buf)
-            if out is not None:
-                out_view = ensure_contiguous_ndarray(out)
-                ndarray_copy(decoded, out_view)
-            else:
-                out = decoded
-            return out
-
-
-register_codec(j2k)
