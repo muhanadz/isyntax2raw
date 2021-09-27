@@ -85,8 +85,8 @@ setup(name='isyntax2raw',
           'numpy==1.17.3',
           'zarr==2.8.1',
           'kajiki==0.8.2',
-          'imagecodecs==2020.1.31',
           'fsspec>=0.9.0',
+          'zarr-jpeg2k'
       ],
       tests_require=[
           'flake8',
