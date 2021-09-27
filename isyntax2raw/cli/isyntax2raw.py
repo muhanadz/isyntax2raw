@@ -65,19 +65,27 @@ def cli():
     help="enable debugging",
 )
 @click.option(
-    "--psnr", default=50, show_default=True,
-    help="JPEG-2000 compression PSNR"
+    "--level", default=50, type=int, show_default=True,
+    help="JPEG-2000 compression level. Higher is better compression. Only \
+          works when compression is set to jpeg2k"
+)
+@click.option(
+    "--compression", default='blosc', show_default=True,
+    type=click.Choice(['blosc', 'zlib', 'jpeg2k', 'raw'],
+                      case_sensitive=False),
+    help="Chunk compression type"
 )
 @click.argument("input_path")
 @click.argument("output_path")
 def write_tiles(
     tile_width, tile_height, resolutions, max_workers, batch_size,
-    fill_color, nested, debug, input_path, output_path, psnr
+    fill_color, nested, debug, input_path, output_path, compression, level
 ):
     setup_logging(debug)
     with WriteTiles(
         tile_width, tile_height, resolutions, max_workers,
-        batch_size, fill_color, nested, input_path, output_path, psnr
+        batch_size, fill_color, nested, input_path, output_path,
+        compression, level
     ) as wt:
         wt.write_metadata()
         wt.write_label_image()
@@ -96,7 +104,7 @@ def write_metadata(debug, input_path, output_file):
     setup_logging(debug)
     with WriteTiles(
         None, None, None, None,
-        None, None, None, input_path, None
+        None, None, None, input_path, None, None, None
     ) as wt:
         wt.write_metadata_json(output_file)
 
