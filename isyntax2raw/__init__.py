@@ -19,7 +19,7 @@ import softwarerendercontext
 import softwarerenderbackend
 import zarr
 
-from zarr_j2k import j2k
+from zarr_jpeg2k import jpeg2k
 from numcodecs import Blosc
 
 from datetime import datetime
@@ -524,8 +524,8 @@ class WriteTiles(object):
             compressor = Blosc(cname='lz4', clevel=5, shuffle=Blosc.SHUFFLE)
         if self.compression == 'zlib':
             compressor = zarr.Zlib(level=1)
-        if self.compression == 'j2k':
-            compressor = j2k(self.level)
+        if self.compression == 'jpeg2k':
+            compressor = jpeg2k(self.level)
         if self.compression == 'raw':
             compressor = None
         self.zarr_store = FSStore(

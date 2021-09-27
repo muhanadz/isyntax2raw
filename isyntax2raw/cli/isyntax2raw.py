@@ -67,11 +67,12 @@ def cli():
 @click.option(
     "--level", default=50, type=int, show_default=True,
     help="JPEG-2000 compression level. Higher is better compression. Only \
-          works when compression is set to j2k"
+          works when compression is set to jpeg2k"
 )
 @click.option(
     "--compression", default='blosc', show_default=True,
-    type=click.Choice(['blosc', 'zlib', 'j2k', 'raw'], case_sensitive=False),
+    type=click.Choice(['blosc', 'zlib', 'jpeg2k', 'raw'],
+                      case_sensitive=False),
     help="Chunk compression type"
 )
 @click.argument("input_path")
